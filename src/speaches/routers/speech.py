@@ -61,6 +61,19 @@ ModelId = Annotated[
 
 def handle_openai_supported_voices(voice_id: str) -> str:
     if voice_id in OPENAI_SUPPORTED_SPEECH_VOICE_NAMES:
+        if voice_id == "alloy":
+            return "af_sky"
+        elif voice_id == "nova":
+            return "af"
+        elif voice_id == "shimmer":
+            return "af_nicole"
+        elif voice_id == "echo":
+            return "bm_lewis"
+        elif voice_id == "fable":
+            return "am_michael"
+        elif voice_id == "onyx":
+            return "bm_george"
+
         logger.warning(f"{voice_id} is not a valid voice id. Using '{DEFAULT_VOICE_ID}' instead.")
         return DEFAULT_VOICE_ID
     return voice_id
