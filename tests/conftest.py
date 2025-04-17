@@ -8,28 +8,29 @@ from fastapi.testclient import TestClient
 import httpx
 from httpx import ASGITransport, AsyncClient
 from openai import AsyncOpenAI
+from pydantic import SecretStr
 import pytest
 import pytest_asyncio
 from pytest_mock import MockerFixture
 
 from speaches.config import Config, WhisperConfig
 from speaches.dependencies import get_config
-from speaches.hf_utils import download_kokoro_model
+from speaches.kokoro_utils import download_kokoro_model
 from speaches.main import create_app
 
 DISABLE_LOGGERS = ["multipart.multipart", "faster_whisper"]
 OPENAI_BASE_URL = "https://api.openai.com/v1"
-DEFAULT_WHISPER_MODEL = "Systran/faster-whisper-tiny.en"
-# TODO: figure out a way to initialize the config without parsing environment variables, as those may interfere with the tests  # noqa: E501
-DEFAULT_WHISPER_CONFIG = WhisperConfig(model=DEFAULT_WHISPER_MODEL, ttl=0)
+# TODO: figure out a way to initialize the config without parsing environment variables, as those may interfere with the tests
+DEFAULT_WHISPER_CONFIG = WhisperConfig(ttl=0)
+api_key = os.getenv("OPENAI_API_KEY")
+if api_key is None:
+    api_key = "cant-be-empty"  # HACK
 DEFAULT_CONFIG = Config(
     whisper=DEFAULT_WHISPER_CONFIG,
     # disable the UI as it slightly increases the app startup time due to the imports it's doing
     enable_ui=False,
-    transcription_base_url=None,
-    speech_base_url=None,
     chat_completion_base_url="https://api.openai.com/v1",
-    chat_completion_api_key=os.getenv("OPENAI_API_KEY"),
+    chat_completion_api_key=SecretStr(api_key),
 )
 TIMEOUT = httpx.Timeout(15.0)
 
@@ -43,7 +44,6 @@ def pytest_configure() -> None:
 # NOTE: not being used. Keeping just in case. Needs to be modified to work similarly to `aclient_factory`
 @pytest.fixture
 def client() -> Generator[TestClient, None, None]:
-    os.environ["WHISPER__MODEL"] = "Systran/faster-whisper-tiny.en"
     with TestClient(create_app()) as client:
         yield client
 
@@ -59,7 +59,7 @@ async def aclient_factory(mocker: MockerFixture) -> AclientFactory:
 
     @asynccontextmanager
     async def inner(config: Config = DEFAULT_CONFIG) -> AsyncGenerator[AsyncClient, None]:
-        # NOTE: all calls to `get_config` should be patched. One way to test that this works is to update the original `get_config` to raise an exception and see if the tests fail  # noqa: E501
+        # NOTE: all calls to `get_config` should be patched. One way to test that this works is to update the original `get_config` to raise an exception and see if the tests fail
         mocker.patch("speaches.dependencies.get_config", return_value=config)
         mocker.patch("speaches.main.get_config", return_value=config)
         # NOTE: I couldn't get the following to work but it shouldn't matter

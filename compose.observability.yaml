@@ -1,6 +1,6 @@
 services:
   opentelemetry-collector:
-    image: otel/opentelemetry-collector-contrib:0.117.0
+    image: otel/opentelemetry-collector-contrib:0.119.0
     command: ["--config=/etc/opentelemetry-collector.yaml"]
     volumes:
       - ./configuration/opentelemetry-collector.yaml:/etc/opentelemetry-collector.yaml
@@ -13,7 +13,7 @@ services:
       # - 13133:13133 # health_check extension
     # NOTE: `healthcheck` can't be set up, as the container doesn't have a shell to run the healthcheck command.
   loki:
-    image: grafana/loki:3.3.2
+    image: grafana/loki:3.4.2
     command: ["-config.file=/etc/loki.yaml"]
     volumes:
       - ./configuration/loki.yaml:/etc/loki.yaml
@@ -38,7 +38,7 @@ services:
       timeout: 5s
       retries: 3
   tempo:
-    image: grafana/tempo:2.6.1
+    image: grafana/tempo:2.7.1
     command: ["-config.file=/etc/tempo.yaml"]
     volumes:
       - ./configuration/tempo.yaml:/etc/tempo.yaml
@@ -51,7 +51,7 @@ services:
       timeout: 5s
       retries: 3
   grafana:
-    image: grafana/grafana:11.4.0
+    image: grafana/grafana:11.5.2
     volumes:
       - ./configuration/grafana/datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml
       - grafana-data:/var/lib/grafana

@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Annotated, Literal
+from typing import TYPE_CHECKING, Annotated
 
 from fastapi import (
     APIRouter,
@@ -15,9 +15,13 @@ from pydantic import BaseModel
 
 from speaches.dependencies import AudioFileDependency  # noqa: TC001
 
+if TYPE_CHECKING:
+    from speaches.model_aliases import ModelId
+
 # NOTE: this should match the default value in `decode_audio` which gets called by `AudioFileDependency`
 SAMPLE_RATE = 16000
 MS_SAMPLE_RATE = SAMPLE_RATE // 1000
+MODEL_ID = "silero_vad_v5"
 
 
 logger = logging.getLogger(__name__)
@@ -43,13 +47,13 @@ def to_ms_speech_timestamps(speech_timestamps: list[SpeechTimestamp]) -> list[Sp
 @router.post("/v1/audio/speech/timestamps")
 def detect_speech_timestamps(
     audio: AudioFileDependency,
-    model: Annotated[Literal["silero_vad_v5"], Form(description="Model name")] = "silero_vad_v5",  # noqa: ARG001
+    model: Annotated[ModelId, Form()] = MODEL_ID,
     threshold: Annotated[
         float,
         Form(
             ge=0,
             le=1,
-            description="""Speech threshold. Silero VAD outputs speech probabilities for each audio chunk, probabilities ABOVE this value are considered as SPEECH. It is better to tune this parameter for each dataset separately, but "lazy" 0.5 is pretty good for most datasets.""",  # noqa: E501
+            description="""Speech threshold. Silero VAD outputs speech probabilities for each audio chunk, probabilities ABOVE this value are considered as SPEECH. It is better to tune this parameter for each dataset separately, but "lazy" 0.5 is pretty good for most datasets.""",
         ),
     ] = 0.75,
     neg_threshold: Annotated[
@@ -88,6 +92,7 @@ def detect_speech_timestamps(
         int, Form(ge=0, description="""Final speech chunks are padded by speech_pad_ms each side""")
     ] = 0,
 ) -> list[SpeechTimestamp]:
+    assert model == "silero_vad_v5", "Only 'silero_vad_v5' model is supported"
     vad_options = VadOptions(
         threshold=threshold,
         neg_threshold=neg_threshold,  # pyright: ignore[reportArgumentType]

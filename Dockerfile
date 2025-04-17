@@ -19,7 +19,7 @@ ENV HOME=/home/ubuntu \
     PATH=/home/ubuntu/.local/bin:$PATH
 WORKDIR $HOME/speaches
 # https://docs.astral.sh/uv/guides/integration/docker/#installing-uv
-COPY --chown=ubuntu --from=ghcr.io/astral-sh/uv:0.5.18 /uv /bin/uv
+COPY --chown=ubuntu --from=ghcr.io/astral-sh/uv:0.6.1 /uv /bin/uv
 # NOTE: per https://docs.astral.sh/uv/guides/install-python, `uv` will automatically install the necessary python version 
 # https://docs.astral.sh/uv/guides/integration/docker/#intermediate-layers
 # https://docs.astral.sh/uv/guides/integration/docker/#compiling-bytecode
@@ -28,14 +28,13 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=uv.lock,target=uv.lock \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
     uv sync --frozen --compile-bytecode --no-install-project
-COPY --chown=ubuntu ./src ./pyproject.toml ./uv.lock ./
+COPY --chown=ubuntu . .
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --compile-bytecode --extra ui
 # Creating a directory for the cache to avoid the following error:
 # PermissionError: [Errno 13] Permission denied: '/home/ubuntu/.cache/huggingface/hub'
 # This error occurs because the volume is mounted as root and the `ubuntu` user doesn't have permission to write to it. Pre-creating the directory solves this issue.
 RUN mkdir -p $HOME/.cache/huggingface/hub
-ENV WHISPER__MODEL=Systran/faster-whisper-large-v3
 ENV UVICORN_HOST=0.0.0.0
 ENV UVICORN_PORT=8000
 ENV PATH="$HOME/speaches/.venv/bin:$PATH"
