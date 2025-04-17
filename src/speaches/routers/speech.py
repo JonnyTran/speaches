@@ -44,15 +44,15 @@ router = APIRouter(tags=["speech-to-text"])
 
 def handle_openai_supported_model_ids(model_id: str) -> str:
     if model_id in OPENAI_SUPPORTED_SPEECH_MODEL:
-        logger.warning(f"{model_id} is not a valid model name. Using '{DEFAULT_MODEL_ID}' instead.")
         return DEFAULT_MODEL_ID
     return model_id
 
 
 ModelId = Annotated[
-    Literal["hexgrad/Kokoro-82M", "rhasspy/piper-voices"],
+    str,
     BeforeValidator(handle_openai_supported_model_ids),
     Field(
+        "hexgrad/Kokoro-82M",
         description="The ID of the model",
         examples=["hexgrad/Kokoro-82M", "rhasspy/piper-voices"],
     ),
