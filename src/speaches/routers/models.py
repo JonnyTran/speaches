@@ -1,67 +1,49 @@
-from __future__ import annotations
-
-from typing import TYPE_CHECKING, Annotated
+import os
 
 from fastapi import (
     APIRouter,
     HTTPException,
-    Path,
 )
-import huggingface_hub
 
+from speaches import kokoro_utils, piper_utils
 from speaches.api_types import (
     ListModelsResponse,
     Model,
+    ModelTask,
 )
-from speaches.hf_utils import list_whisper_models
-
-if TYPE_CHECKING:
-    from huggingface_hub.hf_api import ModelInfo
+from speaches.model_aliases import ModelId
+from speaches.whisper_utils import list_local_whisper_models, list_whisper_models
 
 router = APIRouter(tags=["models"])
 
+# TODO: should model aliases be listed?
+
 
 @router.get("/v1/models")
-def get_models() -> ListModelsResponse:
-    whisper_models = list(list_whisper_models())
-    return ListModelsResponse(data=whisper_models)
+def get_models(task: ModelTask | None = None) -> ListModelsResponse:
+    models: list[Model] = []
+    if task is None or task == "text-to-speech":
+        models.extend(kokoro_utils.get_kokoro_models())
+        models.extend(piper_utils.get_piper_models())
+    if task is None or task == "automatic-speech-recognition":
+        if os.getenv("HF_HUB_OFFLINE") is not None:
+            models.extend(list(list_local_whisper_models()))
+        else:
+            models.extend(list(list_whisper_models()))
+    return ListModelsResponse(data=models)
 
 
-@router.get("/v1/models/{model_name:path}")
-def get_model(
-    # NOTE: `examples` doesn't work https://github.com/tiangolo/fastapi/discussions/10537
-    model_name: Annotated[str, Path(example="Systran/faster-distil-whisper-large-v3")],
-) -> Model:
-    models = huggingface_hub.list_models(
-        model_name=model_name, library="ctranslate2", tags="automatic-speech-recognition", cardData=True
-    )
-    models = list(models)
-    models.sort(key=lambda model: model.downloads or -1, reverse=True)
-    if len(models) == 0:
-        raise HTTPException(status_code=404, detail="Model doesn't exists")
-    exact_match: ModelInfo | None = None
-    for model in models:
-        if model.id == model_name:
-            exact_match = model
-            break
-    if exact_match is None:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Model doesn't exists. Possible matches: {', '.join([model.id for model in models])}",
-        )
-    assert exact_match.created_at is not None
-    assert exact_match.card_data is not None
-    assert exact_match.card_data.language is None or isinstance(exact_match.card_data.language, str | list)
-    if exact_match.card_data.language is None:
-        language = []
-    elif isinstance(exact_match.card_data.language, str):
-        language = [exact_match.card_data.language]
+# very naive implementation
+@router.get("/v1/models/{model_id:path}")
+def get_model(model_id: ModelId) -> Model:
+    models: list[Model] = []
+    models.extend(kokoro_utils.get_kokoro_models())
+    models.extend(piper_utils.get_piper_models())
+    if os.getenv("HF_HUB_OFFLINE") is not None:
+        models.extend(list(list_local_whisper_models()))
     else:
-        language = exact_match.card_data.language
-    return Model(
-        id=exact_match.id,
-        created=int(exact_match.created_at.timestamp()),
-        object_="model",
-        owned_by=exact_match.id.split("/")[0],
-        language=language,
-    )
+        models.extend(list(list_whisper_models()))
+    for model in models:
+        if model.id == model_id:
+            return model
+    raise HTTPException(status_code=404, detail=f"Model '{model_id}' not found")

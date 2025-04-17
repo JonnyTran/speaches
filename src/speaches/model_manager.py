@@ -13,7 +13,8 @@ from faster_whisper import WhisperModel
 from kokoro_onnx import Kokoro
 from onnxruntime import InferenceSession
 
-from speaches.hf_utils import get_kokoro_model_path, get_piper_voice_model_file
+from speaches.kokoro_utils import get_kokoro_model_path
+from speaches.piper_utils import get_piper_voice_model_file
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -32,12 +33,16 @@ logger = logging.getLogger(__name__)
 
 class SelfDisposingModel[T]:
     def __init__(
-        self, model_id: str, load_fn: Callable[[], T], ttl: int, unload_fn: Callable[[str], None] | None = None
+        self,
+        model_id: str,
+        load_fn: Callable[[], T],
+        ttl: int,
+        model_unloaded_callback: Callable[[str], None] | None = None,
     ) -> None:
         self.model_id = model_id
         self.load_fn = load_fn
         self.ttl = ttl
-        self.unload_fn = unload_fn
+        self.model_unloaded_callback = model_unloaded_callback
 
         self.ref_count: int = 0
         self.rlock = threading.RLock()
@@ -53,11 +58,10 @@ class SelfDisposingModel[T]:
             if self.expire_timer:
                 self.expire_timer.cancel()
             self.model = None
-            # WARN: ~300 MB of memory will still be held by the model. See https://github.com/SYSTRAN/faster-whisper/issues/992
             gc.collect()
             logger.info(f"Model {self.model_id} unloaded")
-            if self.unload_fn is not None:
-                self.unload_fn(self.model_id)
+            if self.model_unloaded_callback is not None:
+                self.model_unloaded_callback(self.model_id)
 
     def _load(self) -> None:
         with self.rlock:
@@ -118,32 +122,33 @@ class WhisperModelManager:
             num_workers=self.whisper_config.num_workers,
         )
 
-    def _handle_model_unload(self, model_name: str) -> None:
+    def _handle_model_unloaded(self, model_id: str) -> None:
         with self._lock:
-            if model_name in self.loaded_models:
-                del self.loaded_models[model_name]
+            if model_id in self.loaded_models:
+                del self.loaded_models[model_id]
 
-    def unload_model(self, model_name: str) -> None:
+    def unload_model(self, model_id: str) -> None:
         with self._lock:
-            model = self.loaded_models.get(model_name)
+            model = self.loaded_models.get(model_id)
             if model is None:
-                raise KeyError(f"Model {model_name} not found")
-            self.loaded_models[model_name].unload()
+                raise KeyError(f"Model {model_id} not found")
+            # WARN: ~300 MB of memory will still be held by the model. See https://github.com/SYSTRAN/faster-whisper/issues/992
+            self.loaded_models[model_id].unload()
 
-    def load_model(self, model_name: str) -> SelfDisposingModel[WhisperModel]:
-        logger.debug(f"Loading model {model_name}")
+    def load_model(self, model_id: str) -> SelfDisposingModel[WhisperModel]:
+        logger.debug(f"Loading model {model_id}")
         with self._lock:
             logger.debug("Acquired lock")
-            if model_name in self.loaded_models:
-                logger.debug(f"{model_name} model already loaded")
-                return self.loaded_models[model_name]
-            self.loaded_models[model_name] = SelfDisposingModel[WhisperModel](
-                model_name,
-                load_fn=lambda: self._load_fn(model_name),
+            if model_id in self.loaded_models:
+                logger.debug(f"{model_id} model already loaded")
+                return self.loaded_models[model_id]
+            self.loaded_models[model_id] = SelfDisposingModel[WhisperModel](
+                model_id,
+                load_fn=lambda: self._load_fn(model_id),
                 ttl=self.whisper_config.ttl,
-                unload_fn=self._handle_model_unload,
+                model_unloaded_callback=self._handle_model_unloaded,
             )
-            return self.loaded_models[model_name]
+            return self.loaded_models[model_id]
 
 
 ONNX_PROVIDERS = ["CUDAExecutionProvider", "CPUExecutionProvider"]
@@ -164,32 +169,32 @@ class PiperModelManager:
         conf = PiperConfig.from_dict(json.loads(config_path.read_text()))
         return PiperVoice(session=inf_sess, config=conf)
 
-    def _handle_model_unload(self, model_name: str) -> None:
+    def _handle_model_unloaded(self, model_id: str) -> None:
         with self._lock:
-            if model_name in self.loaded_models:
-                del self.loaded_models[model_name]
+            if model_id in self.loaded_models:
+                del self.loaded_models[model_id]
 
-    def unload_model(self, model_name: str) -> None:
+    def unload_model(self, model_id: str) -> None:
         with self._lock:
-            model = self.loaded_models.get(model_name)
+            model = self.loaded_models.get(model_id)
             if model is None:
-                raise KeyError(f"Model {model_name} not found")
-            self.loaded_models[model_name].unload()
+                raise KeyError(f"Model {model_id} not found")
+            self.loaded_models[model_id].unload()
 
-    def load_model(self, model_name: str) -> SelfDisposingModel[PiperVoice]:
+    def load_model(self, model_id: str) -> SelfDisposingModel[PiperVoice]:
         from piper.voice import PiperVoice
 
         with self._lock:
-            if model_name in self.loaded_models:
-                logger.debug(f"{model_name} model already loaded")
-                return self.loaded_models[model_name]
-            self.loaded_models[model_name] = SelfDisposingModel[PiperVoice](
-                model_name,
-                load_fn=lambda: self._load_fn(model_name),
+            if model_id in self.loaded_models:
+                logger.debug(f"{model_id} model already loaded")
+                return self.loaded_models[model_id]
+            self.loaded_models[model_id] = SelfDisposingModel[PiperVoice](
+                model_id,
+                load_fn=lambda: self._load_fn(model_id),
                 ttl=self.ttl,
-                unload_fn=self._handle_model_unload,
+                model_unloaded_callback=self._handle_model_unloaded,
             )
-            return self.loaded_models[model_name]
+            return self.loaded_models[model_id]
 
 
 class KokoroModelManager:
@@ -205,27 +210,27 @@ class KokoroModelManager:
         inf_sess = InferenceSession(model_path, providers=ONNX_PROVIDERS)
         return Kokoro.from_session(inf_sess, str(voices_path))
 
-    def _handle_model_unload(self, model_name: str) -> None:
+    def _handle_model_unloaded(self, model_id: str) -> None:
         with self._lock:
-            if model_name in self.loaded_models:
-                del self.loaded_models[model_name]
+            if model_id in self.loaded_models:
+                del self.loaded_models[model_id]
 
-    def unload_model(self, model_name: str) -> None:
+    def unload_model(self, model_id: str) -> None:
         with self._lock:
-            model = self.loaded_models.get(model_name)
+            model = self.loaded_models.get(model_id)
             if model is None:
-                raise KeyError(f"Model {model_name} not found")
-            self.loaded_models[model_name].unload()
+                raise KeyError(f"Model {model_id} not found")
+            self.loaded_models[model_id].unload()
 
-    def load_model(self, model_name: str) -> SelfDisposingModel[Kokoro]:
+    def load_model(self, model_id: str) -> SelfDisposingModel[Kokoro]:
         with self._lock:
-            if model_name in self.loaded_models:
-                logger.debug(f"{model_name} model already loaded")
-                return self.loaded_models[model_name]
-            self.loaded_models[model_name] = SelfDisposingModel[Kokoro](
-                model_name,
-                load_fn=lambda: self._load_fn(model_name),
+            if model_id in self.loaded_models:
+                logger.debug(f"{model_id} model already loaded")
+                return self.loaded_models[model_id]
+            self.loaded_models[model_id] = SelfDisposingModel[Kokoro](
+                model_id,
+                load_fn=lambda: self._load_fn(model_id),
                 ttl=self.ttl,
-                unload_fn=self._handle_model_unload,
+                model_unloaded_callback=self._handle_model_unloaded,
             )
-            return self.loaded_models[model_name]
+            return self.loaded_models[model_id]

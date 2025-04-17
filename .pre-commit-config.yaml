@@ -26,17 +26,17 @@ repos:
     hooks:
       - id: hadolint
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.9.4
+    rev: v0.9.6
     hooks:
       - id: ruff
         args: [--fix]
       - id: ruff-format
   - repo: https://github.com/google/yamlfmt
-    rev: v0.15.0
+    rev: v0.16.0
     hooks:
       - id: yamlfmt
   - repo: https://github.com/DetachHead/basedpyright-pre-commit-mirror
-    rev: 1.26.0
+    rev: 1.27.1
     hooks:
       - id: basedpyright
         pass_filenames: false # TODO: document

@@ -176,7 +176,7 @@ async def create_text_audio_stream_reply(
     )
 
 
-# NOTE: another option would have been to use `gr.load_chat` but I couldn't get it to work. Worth trying again in the future.  # noqa: E501
+# NOTE: another option would have been to use `gr.load_chat` but I couldn't get it to work. Worth trying again in the future.
 # gr.load_chat(
 #     "https://api.openai.com/v1",
 #     token="sk-xxx",
@@ -243,22 +243,25 @@ def create_audio_chat_tab(config: Config) -> None:  # noqa: C901
             raise ValueError(f"Unsupported response type: {type(chat_completion)}")
 
     async def update_chat_model_dropdown() -> gr.Dropdown:
-        # NOTE: not using `openai_client_from_gradio_req` because we aren't intrested in making API calls to `speaches` but rather to whatever the user specified as LLM api  # noqa: E501
-        openai_client = AsyncOpenAI(base_url=config.chat_completion_base_url, api_key=config.chat_completion_api_key)
+        # NOTE: not using `openai_client_from_gradio_req` because we aren't intrested in making API calls to `speaches` but rather to whatever the user specified as LLM api
+        openai_client = AsyncOpenAI(
+            base_url=config.chat_completion_base_url, api_key=config.chat_completion_api_key.get_secret_value()
+        )
         models = (await openai_client.models.list()).data
-        model_names: list[str] = [model.id for model in models]
+        model_ids: list[str] = [model.id for model in models]
         return gr.Dropdown(
-            choices=model_names,
+            choices=model_ids,
             label="Chat Model",
-            value=model_names[0],
+            value=model_ids[0],
         )
 
     with gr.Tab(label="Audio Chat") as tab:
         state = gr.State(VoiceChatState())
         chat_model_dropdown = gr.Dropdown(
-            choices=["gpt-4o-mini"],
+            choices=[],
             label="Chat Model",
-            value="gpt-4o-mini",
+            info="For this dropdown to be populated, you need to switch to a different tab and then come back to this tab.",
+            value=None,
         )
         stream_checkbox = gr.Checkbox(label="Stream", value=True)
         gr.ChatInterface(
@@ -275,6 +278,7 @@ def create_audio_chat_tab(config: Config) -> None:  # noqa: C901
             additional_inputs=[chat_model_dropdown, stream_checkbox, state],
         )
 
+        # FIXME: doesn't work when this is the first tab that gets loaded
         tab.select(
             update_chat_model_dropdown,
             inputs=None,

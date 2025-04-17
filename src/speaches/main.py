@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import logging
-import platform
 
 from fastapi import (
     FastAPI,
 )
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from starlette.responses import RedirectResponse
 
 from speaches.dependencies import ApiKeyDependency, get_config
 from speaches.logger import setup_logger
@@ -18,6 +19,12 @@ from speaches.routers.misc import (
 )
 from speaches.routers.models import (
     router as models_router,
+)
+from speaches.routers.realtime.rtc import (
+    router as realtime_rtc_router,
+)
+from speaches.routers.realtime.ws import (
+    router as realtime_ws_router,
 )
 from speaches.routers.speech import (
     router as speech_router,
@@ -34,6 +41,7 @@ from speaches.routers.vad import (
 TAGS_METADATA = [
     {"name": "automatic-speech-recognition"},
     {"name": "speech-to-text"},
+    {"name": "realtime"},
     {"name": "models"},
     {"name": "diagnostic"},
     {
@@ -50,9 +58,6 @@ def create_app() -> FastAPI:
 
     logger.debug(f"Config: {config}")
 
-    if platform.machine() != "x86_64":
-        logger.warning("`POST /v1/audio/speech` with `model=rhasspy/piper-voices` is only supported on x86_64 machines")
-
     dependencies = []
     if config.api_key is not None:
         dependencies.append(ApiKeyDependency)
@@ -63,8 +68,14 @@ def create_app() -> FastAPI:
     app.include_router(stt_router)
     app.include_router(models_router)
     app.include_router(misc_router)
+    app.include_router(realtime_rtc_router)
+    app.include_router(realtime_ws_router)
     app.include_router(speech_router)
     app.include_router(vad_router)
+
+    # HACK: move this elsewhere
+    app.get("/v1/realtime", include_in_schema=False)(lambda: RedirectResponse(url="/v1/realtime/"))
+    app.mount("/v1/realtime", StaticFiles(directory="realtime-console/dist", html=True))
 
     if config.allow_origins is not None:
         app.add_middleware(

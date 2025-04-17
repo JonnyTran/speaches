@@ -1,17 +1,12 @@
-from __future__ import annotations
-
+from collections.abc import Iterable
 from functools import cached_property
-from pathlib import Path  # noqa: TC003
-from typing import TYPE_CHECKING, Literal
+from pathlib import Path
+from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field
+import faster_whisper.transcribe
+from pydantic import BaseModel, Field, computed_field
 
-from speaches.text_utils import Transcription, canonicalize_word, segments_to_text
-
-if TYPE_CHECKING:
-    from collections.abc import Iterable
-
-    import faster_whisper.transcribe
+from speaches.text_utils import segments_to_text
 
 
 # https://github.com/openai/openai-openapi/blob/master/openapi.yaml#L10909
@@ -22,7 +17,7 @@ class TranscriptionWord(BaseModel):
     probability: float
 
     @classmethod
-    def from_segments(cls, segments: Iterable[TranscriptionSegment]) -> list[TranscriptionWord]:
+    def from_segments(cls, segments: Iterable["TranscriptionSegment"]) -> list["TranscriptionWord"]:
         words: list[TranscriptionWord] = []
         for segment in segments:
             # NOTE: a temporary "fix" for https://github.com/speaches-ai/speaches/issues/58.
@@ -36,13 +31,6 @@ class TranscriptionWord(BaseModel):
     def offset(self, seconds: float) -> None:
         self.start += seconds
         self.end += seconds
-
-    @classmethod
-    def common_prefix(cls, a: list[TranscriptionWord], b: list[TranscriptionWord]) -> list[TranscriptionWord]:
-        i = 0
-        while i < len(a) and i < len(b) and canonicalize_word(a[i].word) == canonicalize_word(b[i].word):
-            i += 1
-        return a[:i]
 
 
 # https://github.com/openai/openai-openapi/blob/master/openapi.yaml#L10938
@@ -62,7 +50,7 @@ class TranscriptionSegment(BaseModel):
     @classmethod
     def from_faster_whisper_segments(
         cls, segments: Iterable[faster_whisper.transcribe.Segment]
-    ) -> Iterable[TranscriptionSegment]:
+    ) -> Iterable["TranscriptionSegment"]:
         for segment in segments:
             yield cls(
                 id=segment.id,
@@ -95,12 +83,8 @@ class CreateTranscriptionResponseJson(BaseModel):
     text: str
 
     @classmethod
-    def from_segments(cls, segments: list[TranscriptionSegment]) -> CreateTranscriptionResponseJson:
+    def from_segments(cls, segments: list[TranscriptionSegment]) -> "CreateTranscriptionResponseJson":
         return cls(text=segments_to_text(segments))
-
-    @classmethod
-    def from_transcription(cls, transcription: Transcription) -> CreateTranscriptionResponseJson:
-        return cls(text=transcription.text)
 
 
 # https://platform.openai.com/docs/api-reference/audio/verbose-json-object
@@ -116,7 +100,7 @@ class CreateTranscriptionResponseVerboseJson(BaseModel):
     @classmethod
     def from_segment(
         cls, segment: TranscriptionSegment, transcription_info: faster_whisper.transcribe.TranscriptionInfo
-    ) -> CreateTranscriptionResponseVerboseJson:
+    ) -> "CreateTranscriptionResponseVerboseJson":
         return cls(
             language=transcription_info.language,
             duration=segment.end - segment.start,
@@ -128,7 +112,7 @@ class CreateTranscriptionResponseVerboseJson(BaseModel):
     @classmethod
     def from_segments(
         cls, segments: list[TranscriptionSegment], transcription_info: faster_whisper.transcribe.TranscriptionInfo
-    ) -> CreateTranscriptionResponseVerboseJson:
+    ) -> "CreateTranscriptionResponseVerboseJson":
         return cls(
             language=transcription_info.language,
             duration=transcription_info.duration,
@@ -139,61 +123,30 @@ class CreateTranscriptionResponseVerboseJson(BaseModel):
             else None,
         )
 
-    @classmethod
-    def from_transcription(cls, transcription: Transcription) -> CreateTranscriptionResponseVerboseJson:
-        return cls(
-            language="english",  # FIX: hardcoded
-            duration=transcription.duration,
-            text=transcription.text,
-            words=transcription.words,
-            segments=[],  # FIX: hardcoded
-        )
-
 
 # https://github.com/openai/openai-openapi/blob/master/openapi.yaml#L8730
 class ListModelsResponse(BaseModel):
-    data: list[Model]
+    data: list["Model"]
     object: Literal["list"] = "list"
+
+
+ModelTask = Literal["automatic-speech-recognition", "text-to-speech"]  # TODO: add "voice-activity-detection"
 
 
 # https://github.com/openai/openai-openapi/blob/master/openapi.yaml#L11146
 class Model(BaseModel):
     id: str
     """The model identifier, which can be referenced in the API endpoints."""
-    created: int
+    created: int = 0
     """The Unix timestamp (in seconds) when the model was created."""
-    object_: Literal["model"] = Field(serialization_alias="object")
+    object: Literal["model"] = "model"
     """The object type, which is always "model"."""
     owned_by: str
     """The organization that owns the model."""
-    language: list[str] = Field(default_factory=list)
-    """List of ISO 639-3 supported by the model. It's possible that the list will be empty. This field is not a part of the OpenAI API spec and is added for convenience."""  # noqa: E501
+    language: list[str] | None = None
+    """List of ISO 639-3 supported by the model. It's possible that the list will be empty. This field is not a part of the OpenAI API spec and is added for convenience."""
 
-    model_config = ConfigDict(
-        populate_by_name=True,
-        json_schema_extra={
-            "examples": [
-                {
-                    "id": "Systran/faster-whisper-large-v3",
-                    "created": 1700732060,
-                    "object": "model",
-                    "owned_by": "Systran",
-                },
-                {
-                    "id": "Systran/faster-distil-whisper-large-v3",
-                    "created": 1711378296,
-                    "object": "model",
-                    "owned_by": "Systran",
-                },
-                {
-                    "id": "bofenghuang/whisper-large-v2-cv11-french-ct2",
-                    "created": 1687968011,
-                    "object": "model",
-                    "owned_by": "bofenghuang",
-                },
-            ]
-        },
-    )
+    task: ModelTask  # TODO: make a list?
 
 
 # https://github.com/openai/openai-openapi/blob/master/openapi.yaml#L10909
@@ -216,12 +169,7 @@ class Voice(BaseModel):
     model_id: str
     voice_id: str
     created: int
-    owned_by: str = Field(
-        examples=[
-            "hexgrad",
-            "rhaaspy",
-        ]
-    )
+    owned_by: str
     sample_rate: int
     model_path: Path = Field(
         examples=[
