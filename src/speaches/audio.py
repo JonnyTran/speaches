@@ -62,7 +62,13 @@ def convert_audio_format(
                 'pipe:', 
                 acodec='aac',
                 ab='192k',
-                f='adts'  # AAC container format
+                f='adts',
+                af=(
+                    'volume=2.0,'
+                    'equalizer=f=80:t=q:w=1:g=-10,'
+                    'equalizer=f=2000:t=q:w=1:g=3,'
+                    'equalizer=f=10000:t=q:w=1:g=-3'
+                )
             )
             
             out_bytes, _ = ffmpeg.run(
