@@ -50,10 +50,7 @@ def handle_openai_supported_voices(voice_id: str) -> str:
             return "bm_george"
         else:
             return "verse"
-
-        logger.warning(f"{voice_id} is not a valid voice id. Using '{DEFAULT_VOICE_ID}' instead.")
-        return DEFAULT_VOICE_ID
-    return voice_id
+    return DEFAULT_VOICE_ID
 
 
 VoiceId = Annotated[str, BeforeValidator(handle_openai_supported_voices)]  # TODO: description and examples
