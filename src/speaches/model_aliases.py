@@ -2,6 +2,7 @@ from functools import lru_cache
 import json
 from pathlib import Path
 from typing import Annotated
+import logging
 
 from pydantic import BeforeValidator, Field
 
@@ -15,7 +16,9 @@ def load_model_id_aliases() -> dict[str, str]:
 
 def resolve_model_id_alias(model_id: str) -> str:
     model_id_aliases = load_model_id_aliases()
-    return model_id_aliases.get(model_id, model_id)
+    resolved = model_id_aliases.get(model_id, model_id)
+    logging.getLogger(__name__).info(f"resolve_model_id_alias: input={model_id}, resolved={resolved}")
+    return resolved
 
 
 ModelId = Annotated[

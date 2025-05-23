@@ -64,6 +64,16 @@ def create_app() -> FastAPI:
 
     app = FastAPI(dependencies=dependencies, openapi_tags=TAGS_METADATA)
 
+    # Add middleware to log request headers and body
+    @app.middleware("http")
+    async def log_request_headers_and_body(request, call_next):
+        logger = logging.getLogger(__name__)
+        headers = dict(request.headers)
+        body = await request.body()
+        logger.info(f"Request: {request.method} {request.url}\nHeaders: {headers}\nBody: {body[:2048]!r}")
+        response = await call_next(request)
+        return response
+
     app.include_router(chat_router)
     app.include_router(stt_router)
     app.include_router(models_router)
