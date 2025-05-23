@@ -15,7 +15,7 @@ from pytest_mock import MockerFixture
 
 from speaches.config import Config, WhisperConfig
 from speaches.dependencies import get_config
-from speaches.kokoro_utils import download_kokoro_model
+from speaches.executors.kokoro import utils as kokoro_utils
 from speaches.main import create_app
 
 DISABLE_LOGGERS = ["multipart.multipart", "faster_whisper"]
@@ -118,4 +118,4 @@ async def dynamic_openai_client(
 
 @pytest.fixture(scope="session", autouse=True)
 def download_kokoro() -> None:
-    download_kokoro_model()
+    kokoro_utils.model_registry.download_model_files_if_not_exist("speaches-ai/Kokoro-82M-v1.0-ONNX")

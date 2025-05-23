@@ -149,6 +149,8 @@ markers = [
 
 [tool.uv]
 constraint-dependencies = ["llvmlite>=0.40.0"]
+# TODO: create an issue on https://github.com/thewh1teagle/kokoro-onnx regarding this
+override-dependencies = ["onnxruntime-gpu>=1.20.1 ; platform_machine == 'x86_64'", "onnxruntime>=1.20.1 ; platform_machine != 'x86_64'"]
 
 [tool.uv.sources]
 piper-phonemize = [
@@ -160,3 +162,6 @@ piper-phonemize = [
 name = "piper-tts"
 version = "1.2.0"
 requires-dist = ["piper-phonemize"]
+
+[tool.uv.workspace]
+members = ["packages/speaches-cli"]

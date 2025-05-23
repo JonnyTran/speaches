@@ -20,7 +20,9 @@ from openai.resources.audio import AsyncSpeech, AsyncTranscriptions
 from openai.resources.chat.completions import AsyncCompletions
 
 from speaches.config import Config
-from speaches.model_manager import KokoroModelManager, PiperModelManager, WhisperModelManager
+from speaches.executors.kokoro.model_manager import KokoroModelManager
+from speaches.executors.piper.model_manager import PiperModelManager
+from speaches.executors.whisper.model_manager import WhisperModelManager
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +45,7 @@ def get_model_manager() -> WhisperModelManager:
     return WhisperModelManager(config.whisper)
 
 
-ModelManagerDependency = Annotated[WhisperModelManager, Depends(get_model_manager)]
+WhisperModelManagerDependency = Annotated[WhisperModelManager, Depends(get_model_manager)]
 
 
 @lru_cache
